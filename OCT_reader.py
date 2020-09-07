@@ -1,7 +1,9 @@
 # This file shows some example usage of Python functions to read an OCT file.
 # To use exectute this test reader, scroll to the bottom and pass an OCT file to the function unzip_OCTFile.
+# Find the comment #Example usage.
 #
-# Additional modules to be installed should be 'xmltodict' and 'shutil'
+# Additional modules to be installed should be 'xmltodict', 'shutil', and 'gdown'.
+# Tested in Python 3.7 and 3.8
 #
 # This file can be called like below assuming you have only Python 3 installed
 # 'python OCT_reader.py'
@@ -47,7 +49,7 @@ def unzip_OCTFile(filename):
 
 
 
-    named_oct_data_folder = os.path.join(handle['path'],os.path.basename(filename).strip('.oct'))
+    named_oct_data_folder = os.path.join(handle['path'],os.path.basename(filename).split('.oct')[0])
     handle['named_oct_data_folder'] = named_oct_data_folder
     if os.path.exists(named_oct_data_folder):
         warn('Reuse data in {}\n'.format(named_oct_data_folder))
@@ -174,7 +176,12 @@ def close_OCTFile(handle):
 
 
 # Example usage
-handle = unzip_OCTFile('/Users/kai/Documents/Acer_mirror/sdb5/Sergey Alexandrov/srSESF_OCT_data/data/AfterCXL2D(2).oct');
+
+# If you want to download some test OCT file uncomment the next two lines
+# import gdown
+# gdown.download(url='https://drive.google.com/uc?id=18xtWgvMdHw3OslDyyXZ6yMKDywhj_zdR',output='./test.oct')
+handle = unzip_OCTFile('test.oct')
+
 
 # example to list properties
 print('properties:')
@@ -199,7 +206,7 @@ print(get_OCTDataFileProps(handle, data_name = 'Intensity', prop='@Type'))
 # get and plot VideoImage
 data = get_OCTVideoImage(handle)
 pp.figure(num='VideoImage')
-pp.title()
+# pp.title()
 pp.imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
 pp.colorbar()
 
