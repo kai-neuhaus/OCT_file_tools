@@ -21,6 +21,8 @@
 # The function get_OCTIntensityImage demonstrates how to use handle to extract and show the intensity data.
 
 import numpy as np
+from scipy.fftpack import fft,ifft
+import matplotlib; matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as pp
 import xmltodict
 import os
@@ -104,8 +106,6 @@ def get_OCTDataFileProps(handle, data_name=None, prop=None):
 
 def get_OCTFileMetaData(handle, data_name):
     # Update data types if required
-    python_dtypes = {'Colored':{'4':np.int32, '2':np.int16}, 'Real':{'4':np.float32}, 'Raw':{'2':np.uint16}}
-    handle.update({'python_dtypes':python_dtypes})
 
     # Check if data_name is available
     data_names_available = [d['#text'] for d in handle['Ocity']['DataFiles']['DataFile']]
@@ -150,16 +150,44 @@ def get_OCTIntensityImage(handle):
     data = (np.fromfile(data_filename, dtype=(dtype, [sizeX,sizeZ])))[0].T # there are two images. Take the first [0].
     return data
 
-def get_OCTSpectralImage(handle):
-    handle, metadata = get_OCTFileMetaData(handle, data_name='Spectral0')
-    data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
-    img_type = metadata['@Type'] # this is @Real
-    dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
+def get_OCTSpectralRawFrame(handle, idx = 0):
+
+    # if the metadata are all the same for each Spectral.data then this can be called separately once
+    handle, metadata = get_OCTFileMetaData(handle, data_name='Spectral'+str(idx))
+    sign = handle['Ocity']['Instrument']['RawDataIsSigned'].replace('False','unsigned').replace('True','signed')
+    apo_rng = range(int(metadata['@ApoRegionStart0']),int(metadata['@ApoRegionEnd0']))
+    scan_rng = range(int(metadata['@ScanRegionStart0']),int(metadata['@ScanRegionEnd0']))
+    bytesPP = metadata['@BytesPerPixel'] # probably 2
+    raw_type = metadata['@Type'] # Raw
+    data_filename = metadata['#text']
+    data_file = os.path.join(handle['named_oct_data_folder'], data_filename)
+    dtype = handle['python_dtypes'][raw_type][sign][bytesPP]
     sizeX = int(metadata['@SizeX'])
     sizeZ = int(metadata['@SizeZ'])
-    data = (np.fromfile(data_filename, dtype=(dtype, [sizeX,sizeZ])))[0].T # there are two images. Take the first [0].
-    # metadata['Ocity'][]
-    return data
+
+    # select one [0] of two data frames
+    raw_data = np.fromfile(data_file, dtype=(dtype, [sizeX,sizeZ]))[0]
+    apo_data = raw_data[apo_rng]
+    spec_data = raw_data[scan_rng]
+    # return also apodization data
+    return spec_data, apo_data
+
+def get_OCTSpectralImage(handle):
+    spec, apo_data = get_OCTSpectralRawFrame(handle, idx = 0)
+
+    binECnt = np.float(handle['Ocity']['Instrument']['BinaryToElectronCountScaling'])
+    handle, metadata = get_OCTFileMetaData(handle, data_name='OffsetErrors')
+    err_offset_fname = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    err_offset = np.fromfile(err_offset_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
+
+    handle, metadata = get_OCTFileMetaData(handle, data_name='ApodizationSpectrum')
+    apodization_fname = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    apodization_data = np.fromfile(err_offset_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
+
+    # non-linear k-space
+    bframe = spec - np.mean(apo_data,axis=0)
+
+    return bframe
 
 def close_OCTFile(handle):
     """
@@ -182,6 +210,15 @@ def close_OCTFile(handle):
 # gdown.download(url='https://drive.google.com/uc?id=18xtWgvMdHw3OslDyyXZ6yMKDywhj_zdR',output='./test.oct')
 handle = unzip_OCTFile('test.oct')
 
+# Create a python_types dictionary for required data types
+# I.e. the Thorlabs concept can mean a "Raw - signed - 2 bytes" --> np.int16
+# then we use the python_dtypes like:
+# python_dtypes['Raw']['signed']['2']
+python_dtypes = {'Colored': {'4': np.int32, '2': np.int16},
+                 'Real': {'4': np.float32},
+                 'Raw': {'signed': {'1': np.int8, '2': np.int16},
+                         'unsigned': {'1': np.uint8, '2': np.uint16}}}
+handle.update({'python_dtypes': python_dtypes})
 
 # example to list properties
 print('properties:')
@@ -217,7 +254,14 @@ pp.imshow(data,cmap='Greys_r',vmin=30,vmax=50)
 
 pp.colorbar()
 
-# data = get_OCTSpectralImage(handle)
+data = get_OCTSpectralImage(handle)
+# s_at = 100
+# fig, ax = pp.subplots(1,num='Spectrum at {}'.format(s_at))
+# ax.plot(data[s_at,:])
+
+fig, ax = pp.subplots(1,num='Spectral')
+# ax.plot(np.log10(abs(fft(data,axis=0)))[s_at,:])
+ax.imshow(np.log10(abs(ifft(data,axis=1))).T,vmin=-2,vmax=0, cmap='cividis')
 
 pp.show()
 
