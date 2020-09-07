@@ -1,14 +1,22 @@
 # This file shows some example usage of Python functions to read an OCT file.
-# To use exectute this test reader, scroll to the bottom and pass an OCT file to the function open_OCTFile.
+# To use exectute this test reader, scroll to the bottom and pass an OCT file to the function unzip_OCTFile.
 #
 # Additional modules to be installed should be 'xmltodict' and 'shutil'
 #
 # This file can be called like below assuming you have only Python 3 installed
-# 'python open_OCTFile.py'
+# 'python OCT_reader.py'
 # Alternative you can call for specific versions 3 or 3.8
-# 'python3 open_OCTFile.py'
-# 'python3.8 open_OCTFile.py'
+# 'python3 OCT_reader.py'
+# 'python3.8 OCT_reader.py'
 #
+# The function unzip_OCTFile show an option to extract files with python.
+#
+# The Header.xml is converted to a dictionary named 'handle'.
+# This allows to access data for different OCT files.
+#
+# The function get_OCTVideoImage demonstrates how to use handle to extract and show the video image.
+#
+# The function get_OCTIntensityImage demonstrates how to use handle to extract and show the intensity data.
 
 import numpy as np
 import matplotlib.pyplot as pp
@@ -25,7 +33,7 @@ warnings.formatwarning = lambda message, category, filename, lineno, line=None: 
     formatwarning_orig(message, category, filename='', lineno='', line='')
 
 
-def open_OCTFile(filename):
+def unzip_OCTFile(filename):
     """
     Unzip the OCT file into a temp folder.
 
@@ -94,13 +102,16 @@ def get_OCTDataFileProps(handle, data_name=None, prop=None):
 
 def get_OCTFileMetaData(handle, data_name):
     # Update data types if required
-    python_dtypes = {'Colored':{'4':np.int32, '2':np.int16}, 'Real':{'4':np.float32}}
+    python_dtypes = {'Colored':{'4':np.int32, '2':np.int16}, 'Real':{'4':np.float32}, 'Raw':{'2':np.uint16}}
     handle.update({'python_dtypes':python_dtypes})
+
+    # Check if data_name is available
     data_names_available = [d['#text'] for d in handle['Ocity']['DataFiles']['DataFile']]
     data_name = 'data\\'+data_name+'.data' # check this on windows
     assert data_name in data_names_available, 'Did not find {}.\nAvailable names are: {}'.format(data_name,data_names_available)
-    dtypes = {'Colored':{'4':np.int32, '2':np.int16}, 'Real':{'4':np.float32}}
-    metadatas = handle['Ocity']['DataFiles']['DataFile']
+
+    metadatas = handle['Ocity']['DataFiles']['DataFile'] # get list of all data files
+    # select the data file matching data_name
     metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
     print(metadata)
     return handle, metadata
@@ -120,7 +131,6 @@ def get_OCTVideoImage(handle):
     sizeZ = int(metadata['@SizeZ'])
     data = np.fromfile(data_filename, dtype).reshape([sizeX,sizeZ])
     data = abs(data)/abs(data).max()
-    print(data.shape)
     return data
 
 def get_OCTIntensityImage(handle):
@@ -138,6 +148,16 @@ def get_OCTIntensityImage(handle):
     data = (np.fromfile(data_filename, dtype=(dtype, [sizeX,sizeZ])))[0].T # there are two images. Take the first [0].
     return data
 
+def get_OCTSpectralImage(handle):
+    handle, metadata = get_OCTFileMetaData(handle, data_name='Spectral0')
+    data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    img_type = metadata['@Type'] # this is @Real
+    dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
+    sizeX = int(metadata['@SizeX'])
+    sizeZ = int(metadata['@SizeZ'])
+    data = (np.fromfile(data_filename, dtype=(dtype, [sizeX,sizeZ])))[0].T # there are two images. Take the first [0].
+    # metadata['Ocity'][]
+    return data
 
 def close_OCTFile(handle):
     """
@@ -154,7 +174,7 @@ def close_OCTFile(handle):
 
 
 # Example usage
-handle = open_OCTFile('/Users/kai/Documents/Acer_mirror/sdb5/Sergey Alexandrov/srSESF_OCT_data/data/AfterCXL2D(2).oct');
+handle = unzip_OCTFile('/Users/kai/Documents/Acer_mirror/sdb5/Sergey Alexandrov/srSESF_OCT_data/data/AfterCXL2D(2).oct');
 
 # example to list properties
 print('properties:')
@@ -176,22 +196,22 @@ print('\n\ndata file names:')
 print(get_OCTDataFileProps(handle, data_name = 'VideoImage', prop='@Type')) #print type of video image
 print(get_OCTDataFileProps(handle, data_name = 'Intensity', prop='@Type'))
 
-import matplotlib
-matplotlib.use('Qt5Agg') # Better GUI
-from matplotlib.pyplot import *
-
 # get and plot VideoImage
 data = get_OCTVideoImage(handle)
-figure(num='VideoImage')
-imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
-colorbar()
+pp.figure(num='VideoImage')
+pp.title()
+pp.imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
+pp.colorbar()
 
 # get and plot IntensityImage
 data = get_OCTIntensityImage(handle)
-figure(num='Intensity')
-imshow((data))
-imshow(data,cmap='Greys_r',vmin=30,vmax=50)
-colorbar()
-show()
+pp.figure(num='Intensity')
+pp.imshow(data,cmap='Greys_r',vmin=30,vmax=50)
+
+pp.colorbar()
+
+# data = get_OCTSpectralImage(handle)
+
+pp.show()
 
 close_OCTFile(handle)
