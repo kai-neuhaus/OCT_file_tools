@@ -92,41 +92,51 @@ def get_OCTDataFileProps(handle, data_name=None, prop=None):
     prop = metadata[prop]
     return prop
 
-def get_OCTDataFileData(handle, data_name=None):
+def get_OCTFileMetaData(handle, data_name):
+    # Update data types if required
+    python_dtypes = {'Colored':{'4':np.int32, '2':np.int16}, 'Real':{'4':np.float32}}
+    handle.update({'python_dtypes':python_dtypes})
+    data_names_available = [d['#text'] for d in handle['Ocity']['DataFiles']['DataFile']]
+    data_name = 'data\\'+data_name+'.data' # check this on windows
+    assert data_name in data_names_available, 'Did not find {}.\nAvailable names are: {}'.format(data_name,data_names_available)
+    dtypes = {'Colored':{'4':np.int32, '2':np.int16}, 'Real':{'4':np.float32}}
+    metadatas = handle['Ocity']['DataFiles']['DataFile']
+    metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
+    print(metadata)
+    return handle, metadata
+
+def get_OCTVideoImage(handle):
     """
-    Examples how to extract specific data and reconstruct them based on the meta data.
+    Examples how to extract VideoImage data
     :param handle:
     :param data_name:
     :return:
     """
-    dtypes = {'4':np.int32, '2':np.int16}
-    rtypes = {'4':np.float32}
-    metadatas = handle['Ocity']['DataFiles']['DataFile']
-    metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
-    print(metadata)
-    if data_name in 'VideoImage':
-        data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
-        dtype = dtypes[metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
-        sizeX = int(metadata['@SizeX'])
-        sizeZ = int(metadata['@SizeZ'])
-        data = np.fromfile(data_filename, dtype).reshape([sizeX,sizeZ])
-        data = abs(data)/abs(data).max()
-        print(data.shape)
-        print(data.min(), data.max())
-        return data
+    handle, metadata = get_OCTFileMetaData(handle, 'VideoImage')
+    data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    img_type = metadata['@Type']
+    dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
+    sizeX = int(metadata['@SizeX'])
+    sizeZ = int(metadata['@SizeZ'])
+    data = np.fromfile(data_filename, dtype).reshape([sizeX,sizeZ])
+    data = abs(data)/abs(data).max()
+    print(data.shape)
+    return data
 
-    elif data_name in 'Intensity':
-        data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
-        data_type = metadata['@Type'] # this is @Real
-        dtype = rtypes[metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
-        sizeX = int(metadata['@SizeX'])
-        sizeZ = int(metadata['@SizeZ'])
-        data = (np.fromfile(data_filename, dtype=(np.float32, [sizeX,sizeZ])))[0].T # there are two images. Take the first [0].
-        return data
-
-    else:
-        warn('data_name {} not in properties.'.format(data_name))
-
+def get_OCTIntensityImage(handle):
+    """
+    Example how to extract Intensity data
+    :param handle:
+    :return:
+    """
+    handle, metadata = get_OCTFileMetaData(handle, data_name='Intensity')
+    data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    img_type = metadata['@Type'] # this is @Real
+    dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
+    sizeX = int(metadata['@SizeX'])
+    sizeZ = int(metadata['@SizeZ'])
+    data = (np.fromfile(data_filename, dtype=(dtype, [sizeX,sizeZ])))[0].T # there are two images. Take the first [0].
+    return data
 
 
 def close_OCTFile(handle):
@@ -171,13 +181,13 @@ matplotlib.use('Qt5Agg') # Better GUI
 from matplotlib.pyplot import *
 
 # get and plot VideoImage
-data = get_OCTDataFileData(handle, data_name = 'VideoImage')
+data = get_OCTVideoImage(handle)
 figure(num='VideoImage')
 imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
 colorbar()
 
 # get and plot IntensityImage
-data = get_OCTDataFileData(handle, data_name = 'Intensity')
+data = get_OCTIntensityImage(handle)
 figure(num='Intensity')
 imshow((data))
 imshow(data,cmap='Greys_r',vmin=30,vmax=50)
