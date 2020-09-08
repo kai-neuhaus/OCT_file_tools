@@ -45,35 +45,22 @@ def unzip_OCTFile(filename):
     handle['filename'] = filename
     handle['path'] = os.path.join(tempdir, 'OCTData')
 
-    named_oct_data_folder = os.path.join(handle['path'],os.path.basename(filename).split('.oct')[0])
-    handle['named_oct_data_folder'] = named_oct_data_folder
-    if os.path.exists(named_oct_data_folder):
-        warn('Reuse data in {}\n'.format(named_oct_data_folder))
+    temp_oct_data_folder = os.path.join(handle['path'],os.path.basename(filename).split('.oct')[0])
+    handle['temp_oct_data_folder'] = temp_oct_data_folder
+    if os.path.exists(temp_oct_data_folder) and os.path.exists(os.path.join(temp_oct_data_folder, 'Header.xml')):
+        warn('Reuse data in {}\n'.format(temp_oct_data_folder))
     else:
-        print('\nTry to extract {} into {}. Please wait.\n'.format(filename,named_oct_data_folder))
+        print('\nTry to extract {} into {}. Please wait.\n'.format(filename,temp_oct_data_folder))
         if not os.path.exists(handle['path']):
             os.mkdir(handle['path'])
-        if not os.path.exists(named_oct_data_folder):
-            os.mkdir(named_oct_data_folder)
+        if not os.path.exists(temp_oct_data_folder):
+            os.mkdir(temp_oct_data_folder)
 
         with zipfile.ZipFile(file=handle['filename']) as zf:
-            zf.extractall(path=named_oct_data_folder)
-
-        # Thorlabs stores incompatible folder names in zip.
-        # Need to create data explicitly.
-        # walk_object = os.walk(named_oct_data_folder)
-        # for root, dirs, files in walk_object:
-        #     if not os.path.exists(os.path.join(named_oct_data_folder, 'data')):
-        #         os.mkdir(os.path.join(named_oct_data_folder, 'data'))
-        #     for file in files:
-        #         if not 'Header.xml' in file:
-        #             src = os.path.join(root, file)
-        #             dst = os.path.join(root,'data',file.lstrip('data\\\\'))
-        #             shutil.move(src,dst)
-
+            zf.extractall(path=temp_oct_data_folder)
 
     # read Header.xml
-    with open(os.path.join(named_oct_data_folder, 'Header.xml'),'rb') as fid:
+    with open(os.path.join(temp_oct_data_folder, 'Header.xml'),'rb') as fid:
         up_to_EOF = -1
         xmldoc = fid.read(up_to_EOF)
 
@@ -112,7 +99,7 @@ def get_OCTVideoImage(handle):
     """
     handle, metadata = get_OCTFileMetaData(handle, 'VideoImage')
     # print(metadata)
-    data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    data_filename = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     img_type = metadata['@Type']
     dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
     sizeX = int(metadata['@SizeX'])
@@ -126,7 +113,7 @@ def get_OCTIntensityImage(handle):
     Example how to extract Intensity data
     """
     handle, metadata = get_OCTFileMetaData(handle, data_name='Intensity')
-    data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    data_filename = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     img_type = metadata['@Type'] # this is @Real
     dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
     sizeX = int(metadata['@SizeX'])
@@ -148,7 +135,7 @@ def get_OCTSpectralRawFrame(handle, idx = 0):
     bytesPP = metadata['@BytesPerPixel'] # probably 2
     raw_type = metadata['@Type'] # Raw
     data_filename = metadata['#text']
-    data_file = os.path.join(handle['named_oct_data_folder'], data_filename)
+    data_file = os.path.join(handle['temp_oct_data_folder'], data_filename)
     dtype = handle['python_dtypes'][raw_type][sign][bytesPP]
     sizeX = int(metadata['@SizeX'])
     sizeZ = int(metadata['@SizeZ'])
@@ -168,16 +155,16 @@ def get_OCTSpectralImage(handle):
 
     binECnt = np.float(handle['Ocity']['Instrument']['BinaryToElectronCountScaling'])
     handle, metadata = get_OCTFileMetaData(handle, data_name='OffsetErrors')
-    err_offset_fname = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    err_offset_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     err_offset = np.fromfile(err_offset_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
 
     handle, metadata = get_OCTFileMetaData(handle, data_name='ApodizationSpectrum')
-    apodization_fname = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    apodization_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     apodization_data = np.fromfile(apodization_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
     # same length after ifft
 
     handle, metadata = get_OCTFileMetaData(handle, data_name='Chirp')
-    chirp_fname = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    chirp_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     chirp_data = np.fromfile(chirp_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
 
     bframe = spec - np.mean(apo_data,axis=0) # Subtract DC using inline apo_data
@@ -195,7 +182,7 @@ def demo_printing_parameters(handle):
 
     See this code snipped to read the Header.xml data:
 
-    with open(os.path.join(named_oct_data_folder, 'Header.xml'),'rb') as fid:
+    with open(os.path.join(temp_oct_data_folder, 'Header.xml'),'rb') as fid:
     up_to_EOF = -1
     xmldoc = fid.read(up_to_EOF)
 
@@ -226,8 +213,13 @@ def demo_printing_parameters(handle):
 # Example usage
 
 # If you want to download some test OCT file uncomment the next two lines
-# import gdown
-# gdown.download(url='https://drive.google.com/uc?id=18xtWgvMdHw3OslDyyXZ6yMKDywhj_zdR',output='./test.oct')
+if not os.path.exists('test.oct'):
+    print('File \'test.oct\' does not exist.')
+    print('Do you want to download it (50 MB)?')
+    if 'y' in input('y/n'):
+        import gdown
+        gdown.download(url='https://drive.google.com/uc?id=18xtWgvMdHw3OslDyyXZ6yMKDywhj_zdR',output='./test.oct')
+
 handle = unzip_OCTFile('test.oct')
 
 # Create a python_types dictionary for required data types
