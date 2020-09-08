@@ -1,25 +1,3 @@
-# This file shows some example usage of Python functions to read an OCT file.
-# To use exectute this test reader, scroll to the bottom and pass an OCT file to the function unzip_OCTFile.
-# Find the comment #Example usage.
-#
-# Additional modules to be installed should be 'xmltodict', 'shutil', and 'gdown'.
-# Tested in Python 3.7 and 3.8 (Mac, Colab)
-#
-# This file can be called like below assuming you have only Python 3 installed
-# 'python OCT_reader.py'
-# Alternative you can call for specific versions 3 or 3.8
-# 'python3 OCT_reader.py'
-# 'python3.8 OCT_reader.py'
-#
-# The function unzip_OCTFile show an option to extract files with python.
-#
-# The Header.xml is converted to a dictionary named 'handle'.
-# This allows to access data for different OCT files.
-#
-# The function get_OCTVideoImage demonstrates how to use handle to extract and show the video image.
-#
-# The function get_OCTIntensityImage demonstrates how to use handle to extract and show the intensity data.
-
 import numpy as np
 from scipy.fftpack import fft,ifft
 from scipy.interpolate import interp1d
@@ -67,6 +45,15 @@ def unzip_OCTFile(filename):
     # convert Header.xml to dictionary
     handle_xml = xmltodict.parse(xmldoc)
     handle.update(handle_xml)
+
+    # Create a python_types dictionary for required data types
+    # I.e. the Thorlabs concept can mean a "Raw - signed - 2 bytes" --> np.int16
+    python_dtypes = {'Colored': {'4': np.int32, '2': np.int16},
+                     'Real': {'4': np.float32},
+                     'Raw': {'signed': {'1': np.int8, '2': np.int16},
+                             'unsigned': {'1': np.uint8, '2': np.uint16}}}
+    handle.update({'python_dtypes': python_dtypes})
+
     return handle
 
 def get_OCTDataFileProps(handle, data_name=None, prop=None):
@@ -93,34 +80,6 @@ def get_OCTFileMetaData(handle, data_name):
     metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
     return handle, metadata
 
-def get_OCTVideoImage(handle):
-    """
-    Examples how to extract VideoImage data
-    """
-    handle, metadata = get_OCTFileMetaData(handle, 'VideoImage')
-    # print(metadata)
-    data_filename = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
-    img_type = metadata['@Type']
-    dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
-    sizeX = int(metadata['@SizeX'])
-    sizeZ = int(metadata['@SizeZ'])
-    data = np.fromfile(data_filename, dtype).reshape([sizeX,sizeZ])
-    data = abs(data)/abs(data).max()
-    return data
-
-def get_OCTIntensityImage(handle):
-    """
-    Example how to extract Intensity data
-    """
-    handle, metadata = get_OCTFileMetaData(handle, data_name='Intensity')
-    data_filename = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
-    img_type = metadata['@Type'] # this is @Real
-    dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
-    sizeX = int(metadata['@SizeX'])
-    sizeZ = int(metadata['@SizeZ'])
-    data = (np.fromfile(data_filename, dtype=(dtype, [sizeX,sizeZ])))[0].T # there are two images. Take the first [0].
-    return data
-
 def get_OCTSpectralRawFrame(handle, idx = 0):
     """
     Demo read raw spectral data.
@@ -146,113 +105,3 @@ def get_OCTSpectralRawFrame(handle, idx = 0):
     spec_data = raw_data[scan_rng]
     # return also apodization data
     return spec_data, apo_data
-
-def get_OCTSpectralImage(handle):
-    """
-    Reconstruct the image from spectral data: remove DC; k-space-lin; ifft
-    """
-    spec, apo_data = get_OCTSpectralRawFrame(handle, idx = 0)
-
-    binECnt = np.float(handle['Ocity']['Instrument']['BinaryToElectronCountScaling'])
-    handle, metadata = get_OCTFileMetaData(handle, data_name='OffsetErrors')
-    err_offset_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
-    err_offset = np.fromfile(err_offset_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
-
-    handle, metadata = get_OCTFileMetaData(handle, data_name='ApodizationSpectrum')
-    apodization_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
-    apodization_data = np.fromfile(apodization_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
-    # same length after ifft
-
-    handle, metadata = get_OCTFileMetaData(handle, data_name='Chirp')
-    chirp_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
-    chirp_data = np.fromfile(chirp_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
-
-    bframe = spec - np.mean(apo_data,axis=0) # Subtract DC using inline apo_data
-
-    ip_fun = interp1d(x=chirp_data, y=bframe) # create interpolation on chirp_data
-    num_samples = bframe.shape[1] # SizeZ
-    bframe = ip_fun(np.arange(num_samples)) # k-space linearize
-
-    return bframe
-
-def demo_printing_parameters(handle):
-    """
-    This functions demonstrates how to access the xml paratemeters from the dictionary.
-    The parameters are read in the unzip_OCTFile function.
-
-    See this code snipped to read the Header.xml data:
-
-    with open(os.path.join(temp_oct_data_folder, 'Header.xml'),'rb') as fid:
-    up_to_EOF = -1
-    xmldoc = fid.read(up_to_EOF)
-
-    handle_xml = xmltodict.parse(xmldoc)
-    handle.update(handle_xml)
-    """
-    # example to list properties
-    print('properties:')
-    print(handle.keys())  # list all keys in handle
-    print(handle['Ocity'].keys())  # list all keys in Ocity. This is from Header.xml
-    print(handle['Ocity']['Acquisition'].keys())  # list all keys in Acquisition
-    print(handle['Ocity']['MetaInfo']['Comment'])  # get comment value from MetaInfo
-
-    print(handle['Ocity']['Acquisition']['RefractiveIndex'])
-    print(handle['Ocity']['Acquisition']['SpeckleAveraging'].keys())
-    fastaxis = handle['Ocity']['Acquisition']['SpeckleAveraging']['FastAxis']
-    print('Speckle Averaging FastAxis: ', fastaxis)
-    print(handle['Ocity']['Image'].keys())
-
-    # example list all data files
-    print('\n\ndata file names:')
-    [print(h['#text']) for h in handle['Ocity']['DataFiles']['DataFile']]
-
-    print(get_OCTDataFileProps(handle, data_name='VideoImage', prop='@Type'))  # print type of video image
-    print(get_OCTDataFileProps(handle, data_name='Intensity', prop='@Type'))
-
-
-# Example usage
-
-# If you want to download some test OCT file uncomment the next two lines
-if not os.path.exists('test.oct'):
-    print('File \'test.oct\' does not exist.')
-    print('Do you want to download it (50 MB)?')
-    if 'y' in input('y/n'):
-        import gdown
-        gdown.download(url='https://drive.google.com/uc?id=18xtWgvMdHw3OslDyyXZ6yMKDywhj_zdR',output='./test.oct')
-
-handle = unzip_OCTFile('test.oct')
-
-# Create a python_types dictionary for required data types
-# I.e. the Thorlabs concept can mean a "Raw - signed - 2 bytes" --> np.int16
-python_dtypes = {'Colored': {'4': np.int32, '2': np.int16},
-                 'Real': {'4': np.float32},
-                 'Raw': {'signed': {'1': np.int8, '2': np.int16},
-                         'unsigned': {'1': np.uint8, '2': np.uint16}}}
-print('dtype raw_signed_2 =',python_dtypes['Raw']['signed']['2']) # example
-handle.update({'python_dtypes': python_dtypes})
-
-# print some parameters from the xml file
-demo_printing_parameters(handle)
-
-# get and plot VideoImage
-data = get_OCTVideoImage(handle)
-fig,ax = pp.subplots(1,num='VideoImage')
-ax.set_title(fig.canvas.get_window_title())
-im = ax.imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
-pp.colorbar(mappable=im)
-
-# get and plot IntensityImage
-data = get_OCTIntensityImage(handle)
-fig,ax = pp.subplots(1,num='Intensity')
-ax.set_title(fig.canvas.get_window_title())
-im = ax.imshow(data,cmap='Greys_r',vmin=30,vmax=50)
-pp.colorbar(mappable=im)
-
-# get and processed spectral data, and plot the image
-data = get_OCTSpectralImage(handle)
-fig, ax = pp.subplots(1,num='Spectral')
-im = ax.imshow(np.log10(abs(ifft(data)))[:,0:1024].T,vmin=-1.3,vmax=-0.5, cmap='Greys_r',aspect=2,interpolation='antialiased')
-ax.set_title(fig.canvas.get_window_title())
-pp.colorbar(mappable=im)
-pp.show()
-
