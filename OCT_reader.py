@@ -22,6 +22,7 @@
 
 import numpy as np
 from scipy.fftpack import fft,ifft
+from scipy.interpolate import interp1d
 import matplotlib; matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as pp
 import xmltodict
@@ -182,10 +183,18 @@ def get_OCTSpectralImage(handle):
 
     handle, metadata = get_OCTFileMetaData(handle, data_name='ApodizationSpectrum')
     apodization_fname = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
-    apodization_data = np.fromfile(err_offset_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
+    apodization_data = np.fromfile(apodization_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
+    # same length after ifft
 
-    # non-linear k-space
-    bframe = spec - np.mean(apo_data,axis=0)
+    handle, metadata = get_OCTFileMetaData(handle, data_name='Chirp')
+    chirp_fname = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
+    chirp_data = np.fromfile(chirp_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
+
+    bframe = spec - np.mean(apo_data,axis=0) # Subtract DC using inline apo_data
+
+    ip_fun = interp1d(x=chirp_data, y=bframe) # create interpolation on chirp_data
+    num_samples = bframe.shape[1] # SizeZ
+    bframe = ip_fun(np.arange(num_samples)) # k-space linearize
 
     return bframe
 
@@ -272,14 +281,10 @@ ax.set_title(fig.canvas.get_window_title())
 im = ax.imshow(data,cmap='Greys_r',vmin=30,vmax=50)
 pp.colorbar(mappable=im)
 
+# get and processed spectral data, and plot the image
 data = get_OCTSpectralImage(handle)
-# s_at = 100
-# fig, ax = pp.subplots(1,num='Spectrum at {}'.format(s_at))
-# ax.plot(data[s_at,:])
-
 fig, ax = pp.subplots(1,num='Spectral')
-# ax.plot(np.log10(abs(fft(data,axis=0)))[s_at,:])
-im = ax.imshow(np.log10(abs(ifft(data,axis=1))).T,vmin=-2,vmax=0, cmap='cividis',interpolation=None)
+im = ax.imshow(np.log10(abs(ifft(data)))[:,0:1024].T,vmin=-1.3,vmax=-0.5, cmap='Greys_r',aspect=2,interpolation='antialiased')
 ax.set_title(fig.canvas.get_window_title())
 pp.colorbar(mappable=im)
 pp.show()
