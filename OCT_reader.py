@@ -262,15 +262,15 @@ demo_printing_parameters(handle)
 data = get_OCTVideoImage(handle)
 fig,ax = pp.subplots(1,num='VideoImage')
 ax.set_title(fig.canvas.get_window_title())
-ax.imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
-pp.colorbar()
+im = ax.imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
+pp.colorbar(mappable=im)
 
 # get and plot IntensityImage
 data = get_OCTIntensityImage(handle)
 fig,ax = pp.subplots(1,num='Intensity')
 ax.set_title(fig.canvas.get_window_title())
-ax.imshow(data,cmap='Greys_r',vmin=30,vmax=50)
-pp.colorbar()
+im = ax.imshow(data,cmap='Greys_r',vmin=30,vmax=50)
+pp.colorbar(mappable=im)
 
 data = get_OCTSpectralImage(handle)
 # s_at = 100
@@ -279,8 +279,9 @@ data = get_OCTSpectralImage(handle)
 
 fig, ax = pp.subplots(1,num='Spectral')
 # ax.plot(np.log10(abs(fft(data,axis=0)))[s_at,:])
-ax.imshow(np.log10(abs(ifft(data,axis=1))).T,vmin=-2,vmax=0, cmap='cividis')
-
+im = ax.imshow(np.log10(abs(ifft(data,axis=1))).T,vmin=-2,vmax=0, cmap='cividis',interpolation=None)
+ax.set_title(fig.canvas.get_window_title())
+pp.colorbar(mappable=im)
 pp.show()
 
 close_OCTFile(handle)
