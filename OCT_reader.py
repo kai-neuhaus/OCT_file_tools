@@ -60,10 +60,10 @@ def get_OCTDataFileProps(handle, data_name=None, prop=None):
     """
     List some of the properties as in the Header.xml.
     """
-    metadatas = handle['Ocity']['DataFiles']['DataFile']
-    metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
-    prop = metadata[prop]
-    return prop
+    metadata_all = handle['Ocity']['DataFiles']['DataFile']
+    metadata_name = np.take(metadata_all, np.flatnonzero([data_name in h['#text'] for h in metadata_all]))
+    props = [m[prop] for m in metadata_name]
+    return props
 
 def get_OCTFileMetaData(handle, data_name):
     """
@@ -72,7 +72,7 @@ def get_OCTFileMetaData(handle, data_name):
     """
     # Check if data_name is available
     data_names_available = [d['#text'] for d in handle['Ocity']['DataFiles']['DataFile']]
-    data_name = 'data\\'+data_name+'.data' # check this on windows
+    data_name = data_name # check this on windows
     assert data_name in data_names_available, 'Did not find {}.\nAvailable names are: {}'.format(data_name,data_names_available)
 
     metadatas = handle['Ocity']['DataFiles']['DataFile'] # get list of all data files
@@ -80,14 +80,14 @@ def get_OCTFileMetaData(handle, data_name):
     metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
     return handle, metadata
 
-def get_OCTSpectralRawFrame(handle, idx = 0):
+def get_OCTSpectralRawFrame(handle, spec_name = 'Spectral0'):
     """
     Demo read raw spectral data.
     Take note that we access all parameters using the dictionary from Header.xml.
     Although, this still looks a bit messy it should not require changes for different data.
     """
     # if the metadata are all the same for each Spectral.data then this can be called separately once
-    handle, metadata = get_OCTFileMetaData(handle, data_name='Spectral'+str(idx))
+    handle, metadata = get_OCTFileMetaData(handle, data_name=spec_name)
     sign = handle['Ocity']['Instrument']['RawDataIsSigned'].replace('False','unsigned').replace('True','signed')
     apo_rng = range(int(metadata['@ApoRegionStart0']),int(metadata['@ApoRegionEnd0']))
     scan_rng = range(int(metadata['@ScanRegionStart0']),int(metadata['@ScanRegionEnd0']))

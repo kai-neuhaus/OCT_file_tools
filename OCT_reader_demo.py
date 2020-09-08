@@ -73,10 +73,10 @@ def get_OCTDataFileProps(handle, data_name=None, prop=None):
     """
     List some of the properties as in the Header.xml.
     """
-    metadatas = handle['Ocity']['DataFiles']['DataFile']
-    metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
-    prop = metadata[prop]
-    return prop
+    metadata_all = handle['Ocity']['DataFiles']['DataFile']
+    metadata_name = np.take(metadata_all, np.flatnonzero([data_name in h['#text'] for h in metadata_all]))
+    props = [m[prop] for m in metadata_name]
+    return props
 
 def get_OCTFileMetaData(handle, data_name):
     """
@@ -85,7 +85,7 @@ def get_OCTFileMetaData(handle, data_name):
     """
     # Check if data_name is available
     data_names_available = [d['#text'] for d in handle['Ocity']['DataFiles']['DataFile']]
-    data_name = 'data\\'+data_name+'.data' # check this on windows
+    data_name = data_name # check this on windows
     assert data_name in data_names_available, 'Did not find {}.\nAvailable names are: {}'.format(data_name,data_names_available)
 
     metadatas = handle['Ocity']['DataFiles']['DataFile'] # get list of all data files
@@ -97,7 +97,7 @@ def get_OCTVideoImage(handle):
     """
     Examples how to extract VideoImage data
     """
-    handle, metadata = get_OCTFileMetaData(handle, 'VideoImage')
+    handle, metadata = get_OCTFileMetaData(handle, data_name='data\\VideoImage.data')
     # print(metadata)
     data_filename = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     img_type = metadata['@Type']
@@ -112,7 +112,7 @@ def get_OCTIntensityImage(handle):
     """
     Example how to extract Intensity data
     """
-    handle, metadata = get_OCTFileMetaData(handle, data_name='Intensity')
+    handle, metadata = get_OCTFileMetaData(handle, data_name='data\\Intensity.data')
     data_filename = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     img_type = metadata['@Type'] # this is @Real
     dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
@@ -121,14 +121,14 @@ def get_OCTIntensityImage(handle):
     data = (np.fromfile(data_filename, dtype=(dtype, [sizeX,sizeZ])))[0].T # there are two images. Take the first [0].
     return data
 
-def get_OCTSpectralRawFrame(handle, idx = 0):
+def get_OCTSpectralRawFrame(handle, spec_name = 'data\\Spectral0.data'):
     """
     Demo read raw spectral data.
     Take note that we access all parameters using the dictionary from Header.xml.
     Although, this still looks a bit messy it should not require changes for different data.
     """
     # if the metadata are all the same for each Spectral.data then this can be called separately once
-    handle, metadata = get_OCTFileMetaData(handle, data_name='Spectral'+str(idx))
+    handle, metadata = get_OCTFileMetaData(handle, data_name=spec_name)
     sign = handle['Ocity']['Instrument']['RawDataIsSigned'].replace('False','unsigned').replace('True','signed')
     apo_rng = range(int(metadata['@ApoRegionStart0']),int(metadata['@ApoRegionEnd0']))
     scan_rng = range(int(metadata['@ScanRegionStart0']),int(metadata['@ScanRegionEnd0']))
@@ -151,19 +151,19 @@ def get_OCTSpectralImage(handle):
     """
     Reconstruct the image from spectral data: remove DC; k-space-lin; ifft
     """
-    spec, apo_data = get_OCTSpectralRawFrame(handle, idx = 0)
+    spec, apo_data = get_OCTSpectralRawFrame(handle, spec_name = 'data\\Spectral0.data')
 
     binECnt = np.float(handle['Ocity']['Instrument']['BinaryToElectronCountScaling'])
-    handle, metadata = get_OCTFileMetaData(handle, data_name='OffsetErrors')
+    handle, metadata = get_OCTFileMetaData(handle, data_name='data\\OffsetErrors.data')
     err_offset_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     err_offset = np.fromfile(err_offset_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
 
-    handle, metadata = get_OCTFileMetaData(handle, data_name='ApodizationSpectrum')
+    handle, metadata = get_OCTFileMetaData(handle, data_name='data\\ApodizationSpectrum.data')
     apodization_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     apodization_data = np.fromfile(apodization_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
     # same length after ifft
 
-    handle, metadata = get_OCTFileMetaData(handle, data_name='Chirp')
+    handle, metadata = get_OCTFileMetaData(handle, data_name='data\\Chirp.data')
     chirp_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
     chirp_data = np.fromfile(chirp_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
 
@@ -206,13 +206,16 @@ def demo_printing_parameters(handle):
     print('\n\ndata file names:')
     [print(h['#text']) for h in handle['Ocity']['DataFiles']['DataFile']]
 
+    print('\nProperties:')
     print(get_OCTDataFileProps(handle, data_name='VideoImage', prop='@Type'))  # print type of video image
     print(get_OCTDataFileProps(handle, data_name='Intensity', prop='@Type'))
+    print(get_OCTDataFileProps(handle, data_name='Spectral', prop='@Type'))
+    print(get_OCTDataFileProps(handle, data_name='Spectral', prop='#text'))
 
 
 # Example usage
 
-# If you want to download some test OCT file uncomment the next two lines
+# Ask if some test data should be retrieved.
 if not os.path.exists('test.oct'):
     print('File \'test.oct\' does not exist.')
     print('Do you want to download it (50 MB)?')
