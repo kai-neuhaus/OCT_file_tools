@@ -23,3 +23,20 @@ The file OCT_reader_demo.py and OCT_reader_colab.ipynb contain all functions req
 The file OCT_reader.py is collates required functions that can be accessed by importing OCT_reade like:
 
 `from OCT_reader import *`
+
+# OCTtoNPY: Convert OCT to npy or mat
+The OCTtoNPY is a crude example to convert OCT file as npy or mat file.
+
+Again, the example currently only saves the raw data.
+
+If you want to perform processing you will need also to read and write the process data files such as
+Chirp.data, ErrorOffset.data, and maybe others.
+
+I.e. by using the three lines of code somewhere the Chirp.data are obtained and can then
+be saved in whatever format desired:
+```
+    handle, metadata = get_OCTFileMetaData(handle, data_name='data\\Chirp.data')
+    chirp_fname = os.path.join(handle['temp_oct_data_folder'], metadata['#text'])
+    chirp_data = np.fromfile(chirp_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
+```
+Do the same for all other required data.
