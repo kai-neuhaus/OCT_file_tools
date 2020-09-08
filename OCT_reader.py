@@ -201,6 +201,42 @@ def close_OCTFile(handle):
     else:
       warn('Subfolder \'s\' as label not existing.')
 
+def demo_printing_parameters(handle):
+    """
+    This functions demonstrates how to access the xml paratemeters from the dictionary.
+    The parameters are read in the unzip_OCTFile function.
+
+    See this code snipped to read the Header.xml data:
+
+    with open(os.path.join(named_oct_data_folder, 'Header.xml'),'rb') as fid:
+    up_to_EOF = -1
+    xmldoc = fid.read(up_to_EOF)
+
+    handle_xml = xmltodict.parse(xmldoc)
+    handle.update(handle_xml)
+
+    :param handle:
+    :return:
+    """
+    # example to list properties
+    print('properties:')
+    print(handle.keys())  # list all keys in handle
+    print(handle['Ocity'].keys())  # list all keys in Ocity. This is from Header.xml
+    print(handle['Ocity']['Acquisition'].keys())  # list all keys in Acquisition
+    print(handle['Ocity']['MetaInfo']['Comment'])  # get comment value from MetaInfo
+
+    print(handle['Ocity']['Acquisition']['RefractiveIndex'])
+    print(handle['Ocity']['Acquisition']['SpeckleAveraging'].keys())
+    fastaxis = handle['Ocity']['Acquisition']['SpeckleAveraging']['FastAxis']
+    print('Speckle Averaging FastAxis: ', fastaxis)
+    print(handle['Ocity']['Image'].keys())
+
+    # example list all data files
+    print('\n\ndata file names:')
+    [print(h['#text']) for h in handle['Ocity']['DataFiles']['DataFile']]
+
+    print(get_OCTDataFileProps(handle, data_name='VideoImage', prop='@Type'))  # print type of video image
+    print(get_OCTDataFileProps(handle, data_name='Intensity', prop='@Type'))
 
 
 # Example usage
@@ -212,46 +248,28 @@ handle = unzip_OCTFile('test.oct')
 
 # Create a python_types dictionary for required data types
 # I.e. the Thorlabs concept can mean a "Raw - signed - 2 bytes" --> np.int16
-# then we use the python_dtypes like:
-# python_dtypes['Raw']['signed']['2']
 python_dtypes = {'Colored': {'4': np.int32, '2': np.int16},
                  'Real': {'4': np.float32},
                  'Raw': {'signed': {'1': np.int8, '2': np.int16},
                          'unsigned': {'1': np.uint8, '2': np.uint16}}}
+print('dtype raw_signed_2 =',python_dtypes['Raw']['signed']['2']) # example
 handle.update({'python_dtypes': python_dtypes})
 
-# example to list properties
-print('properties:')
-print(handle.keys()) #list all keys in handle
-print(handle['Ocity'].keys()) #list all keys in Ocity. This is from Header.xml
-print(handle['Ocity']['Acquisition'].keys()) #list all keys in Acquisition
-print(handle['Ocity']['MetaInfo']['Comment']) #get comment value from MetaInfo
-
-print(handle['Ocity']['Acquisition']['RefractiveIndex'])
-print(handle['Ocity']['Acquisition']['SpeckleAveraging'].keys())
-fastaxis = handle['Ocity']['Acquisition']['SpeckleAveraging']['FastAxis']
-print('Speckle Averaging FastAxis: ',fastaxis)
-print(handle['Ocity']['Image'].keys())
-
-# example list all data files
-print('\n\ndata file names:')
-[print(h['#text']) for h in handle['Ocity']['DataFiles']['DataFile']]
-
-print(get_OCTDataFileProps(handle, data_name = 'VideoImage', prop='@Type')) #print type of video image
-print(get_OCTDataFileProps(handle, data_name = 'Intensity', prop='@Type'))
+# print some parameters from the xml file
+demo_printing_parameters(handle)
 
 # get and plot VideoImage
 data = get_OCTVideoImage(handle)
-pp.figure(num='VideoImage')
-# pp.title()
-pp.imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
+fig,ax = pp.subplots(1,num='VideoImage')
+ax.set_title(fig.canvas.get_window_title())
+ax.imshow(data,cmap='Greys',vmin=0.0,vmax=0.4)
 pp.colorbar()
 
 # get and plot IntensityImage
 data = get_OCTIntensityImage(handle)
-pp.figure(num='Intensity')
-pp.imshow(data,cmap='Greys_r',vmin=30,vmax=50)
-
+fig,ax = pp.subplots(1,num='Intensity')
+ax.set_title(fig.canvas.get_window_title())
+ax.imshow(data,cmap='Greys_r',vmin=30,vmax=50)
 pp.colorbar()
 
 data = get_OCTSpectralImage(handle)
