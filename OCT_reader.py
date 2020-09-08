@@ -3,7 +3,7 @@
 # Find the comment #Example usage.
 #
 # Additional modules to be installed should be 'xmltodict', 'shutil', and 'gdown'.
-# Tested in Python 3.7 and 3.8
+# Tested in Python 3.7 and 3.8 (Mac, Colab)
 #
 # This file can be called like below assuming you have only Python 3 installed
 # 'python OCT_reader.py'
@@ -29,8 +29,6 @@ import xmltodict
 import os
 import tempfile
 import zipfile
-import shutil
-import json
 import warnings
 from warnings import warn
 formatwarning_orig = warnings.formatwarning
@@ -41,16 +39,11 @@ warnings.formatwarning = lambda message, category, filename, lineno, line=None: 
 def unzip_OCTFile(filename):
     """
     Unzip the OCT file into a temp folder.
-
-    :param filename:
-    :return:
     """
     tempdir = tempfile.gettempdir()
     handle = dict()
     handle['filename'] = filename
     handle['path'] = os.path.join(tempdir, 'OCTData')
-
-
 
     named_oct_data_folder = os.path.join(handle['path'],os.path.basename(filename).split('.oct')[0])
     handle['named_oct_data_folder'] = named_oct_data_folder
@@ -78,16 +71,13 @@ def unzip_OCTFile(filename):
         #             dst = os.path.join(root,'data',file.lstrip('data\\\\'))
         #             shutil.move(src,dst)
 
-    # make folder 's' to indicate it is in use (open)
-    if not os.path.exists(os.path.join(named_oct_data_folder,'s')):
-        os.mkdir(os.path.join(named_oct_data_folder,'s'))
-    else:
-        warn('Folder \'s\' exists.')
 
+    # read Header.xml
     with open(os.path.join(named_oct_data_folder, 'Header.xml'),'rb') as fid:
         up_to_EOF = -1
         xmldoc = fid.read(up_to_EOF)
 
+    # convert Header.xml to dictionary
     handle_xml = xmltodict.parse(xmldoc)
     handle.update(handle_xml)
     return handle
@@ -95,10 +85,6 @@ def unzip_OCTFile(filename):
 def get_OCTDataFileProps(handle, data_name=None, prop=None):
     """
     List some of the properties as in the Header.xml.
-    :param handle:
-    :param data_name:
-    :param prop:
-    :return:
     """
     metadatas = handle['Ocity']['DataFiles']['DataFile']
     metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
@@ -106,8 +92,10 @@ def get_OCTDataFileProps(handle, data_name=None, prop=None):
     return prop
 
 def get_OCTFileMetaData(handle, data_name):
-    # Update data types if required
-
+    """
+    The metadata for files are store in a list.
+    The artifact 'data\\' stems from windows path separators and may need fixing.
+    """
     # Check if data_name is available
     data_names_available = [d['#text'] for d in handle['Ocity']['DataFiles']['DataFile']]
     data_name = 'data\\'+data_name+'.data' # check this on windows
@@ -116,17 +104,14 @@ def get_OCTFileMetaData(handle, data_name):
     metadatas = handle['Ocity']['DataFiles']['DataFile'] # get list of all data files
     # select the data file matching data_name
     metadata = metadatas[np.argwhere([data_name in h['#text'] for h in handle['Ocity']['DataFiles']['DataFile']]).squeeze()]
-    print(metadata)
     return handle, metadata
 
 def get_OCTVideoImage(handle):
     """
     Examples how to extract VideoImage data
-    :param handle:
-    :param data_name:
-    :return:
     """
     handle, metadata = get_OCTFileMetaData(handle, 'VideoImage')
+    # print(metadata)
     data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
     img_type = metadata['@Type']
     dtype = handle['python_dtypes'][img_type][metadata['@BytesPerPixel']] # This is not consistent! unsigned and signed not distinguished!
@@ -139,8 +124,6 @@ def get_OCTVideoImage(handle):
 def get_OCTIntensityImage(handle):
     """
     Example how to extract Intensity data
-    :param handle:
-    :return:
     """
     handle, metadata = get_OCTFileMetaData(handle, data_name='Intensity')
     data_filename = os.path.join(handle['named_oct_data_folder'], metadata['#text'])
@@ -152,7 +135,11 @@ def get_OCTIntensityImage(handle):
     return data
 
 def get_OCTSpectralRawFrame(handle, idx = 0):
-
+    """
+    Demo read raw spectral data.
+    Take note that we access all parameters using the dictionary from Header.xml.
+    Although, this still looks a bit messy it should not require changes for different data.
+    """
     # if the metadata are all the same for each Spectral.data then this can be called separately once
     handle, metadata = get_OCTFileMetaData(handle, data_name='Spectral'+str(idx))
     sign = handle['Ocity']['Instrument']['RawDataIsSigned'].replace('False','unsigned').replace('True','signed')
@@ -174,6 +161,9 @@ def get_OCTSpectralRawFrame(handle, idx = 0):
     return spec_data, apo_data
 
 def get_OCTSpectralImage(handle):
+    """
+    Reconstruct the image from spectral data: remove DC; k-space-lin; ifft
+    """
     spec, apo_data = get_OCTSpectralRawFrame(handle, idx = 0)
 
     binECnt = np.float(handle['Ocity']['Instrument']['BinaryToElectronCountScaling'])
@@ -198,18 +188,6 @@ def get_OCTSpectralImage(handle):
 
     return bframe
 
-def close_OCTFile(handle):
-    """
-    remove 's' folder.
-    :param handle:
-    :return:
-    """
-
-    if os.path.exists(os.path.join(handle['named_oct_data_folder'],'s')):
-      os.rmdir(os.path.join(handle['named_oct_data_folder'], 's'))
-    else:
-      warn('Subfolder \'s\' as label not existing.')
-
 def demo_printing_parameters(handle):
     """
     This functions demonstrates how to access the xml paratemeters from the dictionary.
@@ -223,9 +201,6 @@ def demo_printing_parameters(handle):
 
     handle_xml = xmltodict.parse(xmldoc)
     handle.update(handle_xml)
-
-    :param handle:
-    :return:
     """
     # example to list properties
     print('properties:')
@@ -289,4 +264,3 @@ ax.set_title(fig.canvas.get_window_title())
 pp.colorbar(mappable=im)
 pp.show()
 
-close_OCTFile(handle)
