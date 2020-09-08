@@ -40,3 +40,7 @@ be saved in whatever format desired:
     chirp_data = np.fromfile(chirp_fname, dtype=handle['python_dtypes']['Real'][metadata['@BytesPerPixel']])
 ```
 Do the same for all other required data.
+
+You need to correctly interpret the `dtype` to get the right number format which can be obtained from the xml fields
+@Type and @BytesPerPixel.
+Otherwise you will need to consult `Header.xml` directly.
