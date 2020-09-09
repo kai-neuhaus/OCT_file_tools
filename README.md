@@ -3,6 +3,8 @@ Needs the modules `xmltodict` and `gdown`, so please install those before with p
 
 **The examples are not endorsed by Thorlabs. Please use the provide examples at your own risk.**
 
+Feel free to leave an issue to comment or if you have questions.
+
 For some online demo click the file OCT_reader_colab.ipynb.
 
 For some local experiments download the file OCT_reader_demo.py.
@@ -44,3 +46,16 @@ Do the same for all other required data.
 You need to correctly interpret the `dtype` to get the right number format which can be obtained from the xml fields
 @Type and @BytesPerPixel.
 Otherwise you will need to consult `Header.xml` directly.
+
+#Caveats
+**Specifically not all parameters are the same or present between all systems.**
+
+The Header.xml contains a field `Instrument.Model` which could be used to capture differences between systems.
+
+**The function `demo_printing_parameters` may need to be edited depending on what parameters are available in your Header.xml**
+
+**Also the parameters may depend on the configuration used.**
+
+In the best case you get a KeyError if a parameter is missing or has a different name.
+
+Then you must identify the relevant parameter in the Header.xml yourself and change the your own code.
