@@ -17,6 +17,7 @@ warnings.formatwarning = lambda message, category, filename, lineno, line=None: 
 def shorten_dict_keys( in_dict ):
     '''
     The MAT format does not allow key lengths larger 31 characters.
+    This function returns a new dict looping over all keys and tries to reduce the string length.
     '''
     out_dict = {}
     for k,v in in_dict.items():
@@ -26,81 +27,107 @@ def shorten_dict_keys( in_dict ):
         if len(k)>30:
             while len(k) > 30:
                 k = ''.join([w[:-1] for w in re.findall('[A-Z][^A-Z]*', k)])
+        if '#' in k: k = k.split('#')[1]
+        if '@' in k: k = k.split('@')[1]
         if isinstance(v,dict):
             out_dict[k] = shorten_dict_keys(v)
         else:
             out_dict[k] = v
     return out_dict
 
-def OCTtoMATraw(filename):
+def OCTtoMATraw(oct_filename):
     """
     Convert OCT to MAT file format.
     Keep all data raw; do not process.
+    See test_OCT_convert.m of how to use.
     """
+    # Create a python_types dictionary for required data types
+    # I.e. the Thorlabs concept can mean a "Raw - signed - 2 bytes" --> np.int16
+    python_dtypes = {'Colored': {4: np.int32, 2: np.int16},
+                     'Real': {4: np.float32},
+                     'Raw': {'signed': {1: np.int8, 2: np.int16},
+                             'unsigned': {1: np.uint8, 2: np.uint16}}}
     mat_data = {}
     mat_data['Spectral'] = []
-    with zipfile.ZipFile(file=filename) as zf:
+    mat_data['Spectral_apo'] = []
+    with zipfile.ZipFile(file=oct_filename) as zf:
+        mat_data['Header'] = xmltodict.parse(zf.read('Header.xml'))
+        is_signed = mat_data['Header']['Ocity']['Instrument']['RawDataIsSigned'].replace('True','signed').replace('False','unsigned')
+        mat_data['Header'] = shorten_dict_keys(mat_data['Header'])
+        # create a separate DataFileDict
+        mat_data['Header']['DataFileDict'] = {}
+        for file_object in (mat_data['Header']['Ocity']['DataFiles']['DataFile']):
+            print(file_object)
+            inoct_filename = file_object['#text'].split('data\\')[1].split('.data')[0] #remove the data\\ part and '.data'
+            mat_data['Header']['DataFileDict'][inoct_filename] = shorten_dict_keys(file_object)
+
+
+        # Check if first spectral data has ScanRegionStart0 
+        if 'ScanRegionStart0' in [k for k in mat_data['Header']['DataFileDict']['Spectral0'].keys()]:
+            # use parameters including Spectral0
+            use_Spectral0 = True
+            S0arr_type =    (mat_data['Header']['DataFileDict']['Spectral0']['Type'])
+            S0SizeZ    = int(mat_data['Header']['DataFileDict']['Spectral0']['SizeZ'])
+            S0SizeX    = int(mat_data['Header']['DataFileDict']['Spectral0']['SizeX'])
+            S0bpp      = int(mat_data['Header']['DataFileDict']['Spectral0']['BytesPerPixel'])
+            S0ar_start = int(mat_data['Header']['DataFileDict']['Spectral0']['ApoRegionStart0'])
+            S0ar_end   = int(mat_data['Header']['DataFileDict']['Spectral0']['ApoRegionEnd0'])
+            S0sr_start = int(mat_data['Header']['DataFileDict']['Spectral0']['ScanRegionStart0'])
+            S0sr_end   = int(mat_data['Header']['DataFileDict']['Spectral0']['ScanRegionEnd0'])
+            S0dtype    = python_dtypes[S0arr_type][is_signed][S0bpp]
+        else:
+            # use parameters Spectral0 special only Apo data
+            use_Spectral0 = False
+            S0arr_type =    (mat_data['Header']['DataFileDict']['Spectral0']['Type'])
+            S0SizeZ    = int(mat_data['Header']['DataFileDict']['Spectral0']['SizeZ'])
+            S0SizeX    = int(mat_data['Header']['DataFileDict']['Spectral0']['SizeX'])
+            S0bpp      = int(mat_data['Header']['DataFileDict']['Spectral0']['BytesPerPixel'])
+            S0ar_start = int(mat_data['Header']['DataFileDict']['Spectral0']['ApoRegionStart0'])
+            S0ar_end   = int(mat_data['Header']['DataFileDict']['Spectral0']['ApoRegionEnd0'])
+            S0dtype    = python_dtypes[S0arr_type][is_signed][S0bpp]
+
+            # use parameters Spectral1 for all others
+            S1arr_type = mat_data['Header']['DataFileDict']['Spectral1']['Type']
+            S1SizeZ    = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeZ'])
+            S1SizeX    = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeX'])
+            S1bpp      = int(mat_data['Header']['DataFileDict']['Spectral1']['BytesPerPixel'])
+            S1ar_start = int(mat_data['Header']['DataFileDict']['Spectral1']['ApoRegionStart0'])
+            S1ar_end   = int(mat_data['Header']['DataFileDict']['Spectral1']['ApoRegionEnd0'])
+            S1sr_start = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionStart0'])
+            S1sr_end   = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionEnd0'])
+            S1dtype    = python_dtypes[S1arr_type][is_signed][S1bpp]
 
         for item in zf.filelist:
             print(item.filename)
-            if 'Header' in item.filename:
-                mat_data['Header'] = xmltodict.parse(zf.read(item.filename))
-                mat_data['Header'] = shorten_dict_keys(mat_data['Header'])
 
-            elif 'Spectral' in item.filename:
-                # mat_data['Header']['Ocity']['DataFiles']['DataFile']
-                mat_data['Spectral'].append(zf.read(item.filename))
-            # elif 'Chirp' in item.filename:
-            #     byte_obj = np.frombuffer(zf.read(item.filename),dtype=np.int16)
-            #     print(byte_obj)
-            #     mat_data['Chirp'] = byte_obj
+            if 'Spectral0' in item.filename and not use_Spectral0:
+                # Spectral0 is all apodata
+                data = np.frombuffer(zf.read(item.filename), dtype=(S0dtype,[S0SizeX,S0SizeZ]))[0]
+                mat_data['Spectral_apo'].append(data)
+            elif 'Spectral' in item.filename and use_Spectral0:
+                data = np.frombuffer(zf.read(item.filename), dtype=(S0dtype,[S0SizeX,S0SizeZ]))[0]
+                # store apo data separately
+                apo_data = data[S0ar_start:S0ar_end,:]
+                data = data[S0sr_start:S0sr_end,:]
+                mat_data['Spectral_apo'].append(apo_data)
+                mat_data['Spectral'].append(data)
+
+            elif 'Chirp' in item.filename:
+                arr_type = mat_data['Header']['DataFileDict']['Chirp']['Type']
+                SizeZ = int(mat_data['Header']['DataFileDict']['Chirp']['SizeZ'])
+                bpp = int(mat_data['Header']['DataFileDict']['Chirp']['BytesPerPixel'])
+                py_dtype = python_dtypes[arr_type][bpp]
+                data = np.frombuffer(zf.read(item.filename),dtype=(py_dtype, SizeZ))
+                mat_data['Chirp'] = data
             # elif 'ApodizationSpectrum' in item.filename:
             #     mat_data['ApodizationSpectrum'] = item.filename
             # elif 'OffsetErrors' in item.filename:
             #     mat_data['OffsetErrors'] = zf.read(item.filename)
 
     from scipy.io.matlab import savemat
-    savemat(re.split('.[oO][cC][tT]',filename)[0]+'.mat', mat_data)
+    savemat(re.split('.[oO][cC][tT]',oct_filename)[0]+'.mat', mat_data)
 
+    return mat_data
 
-def header_to_dict(temp_oct_data_folder):
-    # read Header.xml
-    with open(os.path.join(temp_oct_data_folder, 'Header.xml'),'rb') as fid:
-        up_to_EOF = -1
-        xmldoc = fid.read(up_to_EOF)
+mat_data = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
 
-    # convert Header.xml to dictionary
-    handle_xml = xmltodict.parse(xmldoc)
-    handle.update(handle_xml)
-
-
-def OCT_data_types(handle):
-    # Create a python_types dictionary for required data types
-    # I.e. the Thorlabs concept can mean a "Raw - signed - 2 bytes" --> np.int16
-    python_dtypes = {'Colored': {'4': np.int32, '2': np.int16},
-                     'Real': {'4': np.float32},
-                     'Raw': {'signed': {'1': np.int8, '2': np.int16},
-                             'unsigned': {'1': np.uint8, '2': np.uint16}}}
-    handle.update({'python_dtypes': python_dtypes})
-
-
-def get_OCTSpectralAll(handle):
-    #
-    spec_names = get_OCTDataFileProps(handle, data_name='Spectral', prop='#text') # get all Spectral file data
-
-    spec3d = []
-    for sn in spec_names:
-        print(sn)
-        spec, apo_data = get_OCTSpectralRawFrame(handle, spec_name = sn)
-        spec3d.append(spec)
-
-    return spec3d
-
-handle = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
-
-# spec3d = np.array(get_OCTSpectralAll(handle))
-#
-# print(spec3d.shape)
-#
-# # np.save('test_oct', spec3d)
-#
