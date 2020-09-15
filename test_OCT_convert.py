@@ -5,12 +5,13 @@ import numpy as np
 from scipy.io import loadmat
 from scipy.interpolate import interp1d
 from scipy.fftpack import fft, ifft
+import json
 
 def test_OCT_converter():
     data_dict = loadmat('test.mat')
     data = data_dict['Spectral']
     Chirp = data_dict['Chirp'][0]
-    # Header = data_dict['Header'] # Restoring dict from MAT file is not yet working
+    Header = json.loads(data_dict['py_Header'][0]) # Restoring dict from MAT file usin json
     spec = data[0,:,:] # take only 1st B-frame
 
     pdata = spec[1000,:]
@@ -34,11 +35,14 @@ def test_OCT_converter():
 
     # ifft --> z - space
     spec_fft = np.log10(np.abs(ifft(spec_lin, axis=0)))
-    fig = pp.figure()
-    # rangeX = Header['DataFileDict']['Spectral0']['RangeX']
-    # rangeZ = Header['DataFileDict']['Spectral0']['RangeZ']
+    # fig, ax = pp.subplots(1,num='Intensity Image')
+    fig = pp.figure(num='Intensity Image')
+    rangeX = np.float(Header['DataFileDict']['Spectral0']['RangeX'])
+    rangeZ = np.float(Header['DataFileDict']['Spectral0']['RangeZ'])
     grid = ImageGrid(fig, 111, nrows_ncols=(1, 1), axes_pad=0.1, cbar_mode='single')
-    imax = grid[0].imshow(spec_fft[1:spec_zs//2,:], cmap='Greys_r',vmin=-1.5,vmax=-0.5)
+    imax = grid[0].imshow(spec_fft[1:spec_zs//2,:], cmap='Greys_r',vmin=-1.5,vmax=-0.5,extent=(0,rangeX,rangeZ,0))
+    grid[0].set_xlabel('X (mm)')
+    grid[0].set_ylabel('Z (mm)')
     cax = grid.cbar_axes[0]
     fig.colorbar(mappable=imax, cax=cax)
 

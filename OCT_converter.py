@@ -22,6 +22,7 @@ import xmltodict
 import os
 import re
 import zipfile
+import json
 import warnings
 from warnings import warn
 formatwarning_orig = warnings.formatwarning
@@ -74,8 +75,8 @@ def OCTtoMATraw(oct_filename):
         for file_object in (mat_data['Header']['Ocity']['DataFiles']['DataFile']):
             print(file_object)
             inoct_filename = file_object['#text'].split('data\\')[1].split('.data')[0] #remove the data\\ part and '.data'
-            mat_data['Header']['DataFileDict'][inoct_filename] = shorten_dict_keys(file_object)
-
+            mat_data['Header']['DataFileDict'][inoct_filename] = dict(shorten_dict_keys(file_object))
+        mat_data['py_Header'] = json.dumps(mat_data['Header']) # For Python we need to use json
 
         S0arr_type = (mat_data['Header']['DataFileDict']['Spectral0']['Type'])
         S0SizeZ = int(mat_data['Header']['DataFileDict']['Spectral0']['SizeZ'])
