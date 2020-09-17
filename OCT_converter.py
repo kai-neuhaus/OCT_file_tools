@@ -86,13 +86,15 @@ def OCTtoMATraw(oct_filename):
         S0ar_end = int(mat_data['Header']['DataFileDict']['Spectral0']['ApoRegionEnd0'])
         S0dtype = python_dtypes[S0arr_type][is_signed][S0bpp]
 
-        S1arr_type  = mat_data['Header']['DataFileDict']['Spectral1']['Type']
-        S1SizeZ     = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeZ'])
-        S1SizeX     = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeX'])
-        S1bpp       = int(mat_data['Header']['DataFileDict']['Spectral1']['BytesPerPixel'])
-        S1sr_start  = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionStart0'])
-        S1sr_end    = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionEnd0'])
-        S1dtype     = python_dtypes[S1arr_type][is_signed][S1bpp]
+        # Single B-scans may contain only Spectral0.data
+        if mat_data['Header']['DataFileDict'].get('Spectral1'):
+            S1arr_type  = mat_data['Header']['DataFileDict']['Spectral1']['Type']
+            S1SizeZ     = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeZ'])
+            S1SizeX     = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeX'])
+            S1bpp       = int(mat_data['Header']['DataFileDict']['Spectral1']['BytesPerPixel'])
+            S1sr_start  = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionStart0'])
+            S1sr_end    = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionEnd0'])
+            S1dtype     = python_dtypes[S1arr_type][is_signed][S1bpp]
 
         for item in zf.filelist:
             print(item.filename)
@@ -140,4 +142,5 @@ def OCTtoMATraw(oct_filename):
 
     return mat_data
 
-mat_data = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
+# mat_data = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
+mat_data = OCTtoMATraw('/Users/kai/National University of Ireland, Galway/ARANGATH, ANAND - ns_MSC_PELLETS/Anand_MSC_CCM_HALF/Anand_MSC_CCM_half_0004_Mode3D.oct') # see OCT_reader_demo.py to retrieve test.oct
