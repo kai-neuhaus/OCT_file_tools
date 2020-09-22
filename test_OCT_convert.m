@@ -9,12 +9,17 @@ function test_OCT_convert()
     %
     close('all');
     load('test.mat')
-    
+
+    % The 3D matrix Spectral is immediately after loading test.mat available
+    % Here the A-line at 1000 for B-frame (1) is obtained
     pdata = (squeeze(Spectral(1,1000,:)));
     figure('name','Raw spectrum');plot(pdata)
 
+    % Get the mean of the apodisation data if it was stored as a region in Spectral.
+    % The variable Spectral_apo will be available.
     mdata = (squeeze(mean(Spectral_apo(1,:,:))))';
 
+    % Get B-frame (1)
     spec = single(squeeze(Spectral(1,:,:)));
     spec_size = size(spec);
     spec_xs = spec_size(1);
@@ -32,6 +37,9 @@ function test_OCT_convert()
     % ifft --> z-space
     spec_fft = log10(abs(ifft(spec_lin,[],2)));
     f=figure();
+    % The header.xml is converted and stored as Header.
+    % Besides Header the substructure Header.DataFileDict is available
+    % to access data for each Spectral data set.
     rangeX = str2double(Header.DataFileDict.Spectral0.RangeX);
     rangeZ = str2double(Header.DataFileDict.Spectral0.RangeZ);
     imagesc(spec_fft(:,1:spec_zs/2)','XData',[0,rangeX],'YData',[0,rangeZ],[-1.5,0.5]);
