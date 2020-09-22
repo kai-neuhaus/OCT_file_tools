@@ -129,6 +129,7 @@ def get_OCTSpectralRawFrame(handle, spec_name = 'data\\Spectral0.data'):
     """
     # if the metadata are all the same for each Spectral.data then this can be called separately once
     handle, metadata = get_OCTFileMetaData(handle, data_name=spec_name)
+    # make False --> 'unsigned', True --> 'signed
     sign = handle['Ocity']['Instrument']['RawDataIsSigned'].replace('False','unsigned').replace('True','signed')
     apo_rng = range(int(metadata['@ApoRegionStart0']),int(metadata['@ApoRegionEnd0']))
     scan_rng = range(int(metadata['@ScanRegionStart0']),int(metadata['@ScanRegionEnd0']))
@@ -146,6 +147,32 @@ def get_OCTSpectralRawFrame(handle, spec_name = 'data\\Spectral0.data'):
     spec_data = raw_data[scan_rng]
     # return also apodization data
     return spec_data, apo_data
+
+def get_OCTSpectralRawFrame2(handle, spec_name = 'data\\Spectral0.data'):
+    """
+    Demo read raw spectral data for a different data file.
+    In this case the first Spectral0.data is all apodization data.
+    The first file has now a different set of parameters
+    """
+    handle, metadata = get_OCTFileMetaData(handle, data_name=spec_name)
+    sign = handle['Ocity']['Instrument']['RawDataIsSigned'].replace('False','unsigned').replace('True','signed')
+    apo_rng = range(int(metadata['@ApoRegionStart0']),int(metadata['@ApoRegionEnd0']))
+    scan_rng = range(int(metadata['@ScanRegionStart0']),int(metadata['@ScanRegionEnd0']))
+    bytesPP = metadata['@BytesPerPixel'] # probably 2
+    raw_type = metadata['@Type'] # Raw
+    data_filename = metadata['#text']
+    data_file = os.path.join(handle['temp_oct_data_folder'], data_filename)
+    dtype = handle['python_dtypes'][raw_type][sign][bytesPP]
+    sizeX = int(metadata['@SizeX'])
+    sizeZ = int(metadata['@SizeZ'])
+
+    # select one [0] of two data frames
+    raw_data = np.fromfile(data_file, dtype=(dtype, [sizeX,sizeZ]))[0]
+    apo_data = raw_data[apo_rng]
+    spec_data = raw_data[scan_rng]
+    # return also apodization data
+    return spec_data, apo_data
+
 
 def get_OCTSpectralImage(handle):
     """
@@ -197,9 +224,9 @@ def demo_printing_parameters(handle):
     print(handle['Ocity']['MetaInfo']['Comment'])  # get comment value from MetaInfo
 
     print(handle['Ocity']['Acquisition']['RefractiveIndex'])
-    print(handle['Ocity']['Acquisition']['SpeckleAveraging'].keys())
-    fastaxis = handle['Ocity']['Acquisition']['SpeckleAveraging']['FastAxis']
-    print('Speckle Averaging FastAxis: ', fastaxis)
+    # print(handle['Ocity']['Acquisition']['SpeckleAveraging'].keys())
+    # fastaxis = handle['Ocity']['Acquisition']['SpeckleAveraging']['FastAxis']
+    # print('Speckle Averaging FastAxis: ', fastaxis)
     print(handle['Ocity']['Image'].keys())
 
     # example list all data files
@@ -223,8 +250,8 @@ if not os.path.exists('test.oct'):
         import gdown
         gdown.download(url='https://drive.google.com/uc?id=18xtWgvMdHw3OslDyyXZ6yMKDywhj_zdR',output='./test.oct')
 
-handle = unzip_OCTFile('test.oct')
-
+# handle = unzip_OCTFile('test.oct')
+handle = unzip_OCTFile('/Users/kai/Documents/Acer_mirror/sdb5/Sergey Alexandrov/srSESF_OCT_data/data/RS_12032019_0008_Mode3D_1280_NSDT.oct')
 # Create a python_types dictionary for required data types
 # I.e. the Thorlabs concept can mean a "Raw - signed - 2 bytes" --> np.int16
 python_dtypes = {'Colored': {'4': np.int32, '2': np.int16},

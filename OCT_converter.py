@@ -134,13 +134,18 @@ def OCTtoMATraw(oct_filename):
                 py_dtype = python_dtypes[arr_type][bpp]
                 data = np.frombuffer(zf.read(item.filename),dtype=(py_dtype, SizeZ))
                 mat_data['ApodizationSpectrum'] = data
-            # elif 'OffsetErrors' in item.filename:
-            #     mat_data['OffsetErrors'] = zf.read(item.filename)
+            elif 'OffsetErrors' in item.filename:
+                arr_type = mat_data['Header']['DataFileDict']['OffsetErrors']['Type']
+                SizeZ = int(mat_data['Header']['DataFileDict']['OffsetErrors']['SizeZ'])
+                bpp = int(mat_data['Header']['DataFileDict']['OffsetErrors']['BytesPerPixel'])
+                py_dtype = python_dtypes[arr_type][bpp]
+                data = np.frombuffer(zf.read(item.filename),dtype=(py_dtype, SizeZ))
+                mat_data['OffsetErrors'] = data
 
     from scipy.io.matlab import savemat
     savemat(re.split('\.[oO][cC][tT]',oct_filename)[0]+'.mat', mat_data)
 
     return mat_data
 
-# mat_data = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
-mat_data = OCTtoMATraw('/Users/kai/National University of Ireland, Galway/ARANGATH, ANAND - ns_MSC_PELLETS/Anand_MSC_CCM_HALF/Anand_MSC_CCM_half_0004_Mode3D.oct') # see OCT_reader_demo.py to retrieve test.oct
+
+mat_data = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
