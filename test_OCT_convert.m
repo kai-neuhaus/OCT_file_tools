@@ -26,9 +26,7 @@ function test_OCT_convert()
     spec_zs = spec_size(2);
 
     % remove DC
-    for i = 1:spec_xs
-        spec(i,:) = spec(i,:) - mdata;
-    end
+    spec = spec - mdata;
     figure('name','DC removed spectrum');plot(spec(1000,:));hold('on')
 
     % linearize k-space
