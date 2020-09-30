@@ -63,10 +63,8 @@ def OCTtoMATraw(oct_filename):
                      'Real': {4: np.float32},
                      'Raw': {'signed': {1: np.int8, 2: np.int16},
                              'unsigned': {1: np.uint8, 2: np.uint16}}}
-    mat_data = {}
-    mat_data['Spectral'] = []
-    mat_data['Spectral_apo'] = []
     with zipfile.ZipFile(file=oct_filename) as zf:
+        mat_data = {}
         mat_data['Header'] = xmltodict.parse(zf.read('Header.xml'))
         is_signed = mat_data['Header']['Ocity']['Instrument']['RawDataIsSigned'].replace('True','signed').replace('False','unsigned')
         mat_data['Header'] = shorten_dict_keys(mat_data['Header'])
@@ -86,7 +84,16 @@ def OCTtoMATraw(oct_filename):
         S0ar_end = int(mat_data['Header']['DataFileDict']['Spectral0']['ApoRegionEnd0'])
         S0dtype = python_dtypes[S0arr_type][is_signed][S0bpp]
 
-        # Single B-scans may contain only Spectral0.data
+        # Add one to include last number for array/matrix allocation indexing.
+        SizeY = int(mat_data['Header']['Ocity']['Image']['SizePixel']['SizeY']) + 1
+        Spectral = np.zeros([SizeY, S0SizeX, S0SizeZ])
+        S0ar_len = S0ar_end - S0ar_start
+        Spectral_apo = np.zeros([SizeY, S0ar_len])
+
+        # TODO: We can possibly use the Header.Ocity.Image parameter avoiding ifelses
+
+        # Test if a Spectral1.data exist and extract parameters and use for all other raw Spectral data.
+        # We use Spectral1.data as it can be that Spectral0.data is a complete different type of ApodizationSpectrum.
         if mat_data['Header']['DataFileDict'].get('Spectral1'):
             S1arr_type  = mat_data['Header']['DataFileDict']['Spectral1']['Type']
             S1SizeZ     = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeZ'])
@@ -96,30 +103,38 @@ def OCTtoMATraw(oct_filename):
             S1sr_end    = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionEnd0'])
             S1dtype     = python_dtypes[S1arr_type][is_signed][S1bpp]
 
+        # Loop over all remaining items
         for item in zf.filelist:
             print(item.filename)
 
             if 'Spectral0' in item.filename and mat_data['Header']['DataFileDict']['Spectral0'].get('ScanRegionStart0'):
+                # If Spectral0 exists and has parameter ScanRegionStart0 split raw and apo data.
                 S0sr_start = int(mat_data['Header']['DataFileDict']['Spectral0']['ScanRegionStart0'])
                 S0sr_end = int(mat_data['Header']['DataFileDict']['Spectral0']['ScanRegionEnd0'])
                 data = np.frombuffer(zf.read(item.filename), dtype=(S0dtype, [S0SizeX, S0SizeZ]))[0]
-                mat_data['Spectral'].append(data[S0sr_start:S0sr_end, :])
-                mat_data['Spectral_apo'].append(data[S0ar_start:S0ar_end, :])
-            elif 'Spectral0' in item.filename:
-                data = np.frombuffer(zf.read(item.filename), dtype=(S0dtype, [S0SizeX, S0SizeZ]))[0]
-                mat_data['Spectral_apo'].append(data)
+                Spectral[0] = data[S0sr_start:S0sr_end, :]
+                Spectral_apo[0] = data[S0ar_start:S0ar_end, :]
+
+            elif 'Spectral0' in item.filename and mat_data['Header']['DataFileDict']['Spectral0'].get('ApoRegionStart0'):
+                # If Spectral0 and ApoRegionStart0 exists read it as a complete Apodization spectrum
+                data = np.frombuffer(zf.read(item.filename), dtype=(S0dtype, S0SizeX))[0]
+                Spectral_apo[0] = data
 
             elif 'Spectral1' in item.filename and mat_data['Header']['DataFileDict']['Spectral1'].get('ApoRegionStart0'):
+                # If Spectral1 exists and has ApoRegionStart0 split raw and apo data.
                 S1ar_start = int(mat_data['Header']['DataFileDict']['Spectral1']['ApoRegionStart0'])
                 S1ar_end = int(mat_data['Header']['DataFileDict']['Spectral1']['ApoRegionEnd0'])
                 data = np.frombuffer(zf.read(item.filename), dtype=(S1dtype,[S1SizeX,S1SizeZ]))[0]
-                mat_data['Spectral_apo'].append(data[S1ar_start:S1ar_end,:])
-                mat_data['Spectral'].append(data[S1sr_start:S1sr_end,:])
+                Spectral_apo[1] = data[S1ar_start:S1ar_end,:]
+                Spectral[1] = data[S1sr_start:S1sr_end,:]
 
             elif 'Spectral' in item.filename and not('Spectral0' in item.filename):
+                # If any Spectral (n>1) data exist and is not n=0, then it has no ApoRegion extract as full raw data.
                 data = np.frombuffer(zf.read(item.filename), dtype=(S1dtype,[S1SizeX,S1SizeZ]))[0]
-                mat_data['Spectral'].append(data)
+                n = int(item.filename.split('Spectral')[1].split('.data')[0])
+                Spectral[n] = data
 
+            # otherwise extract uniquely named data sets
             elif 'Chirp' in item.filename:
                 arr_type = mat_data['Header']['DataFileDict']['Chirp']['Type']
                 SizeZ = int(mat_data['Header']['DataFileDict']['Chirp']['SizeZ'])
@@ -141,11 +156,14 @@ def OCTtoMATraw(oct_filename):
                 py_dtype = python_dtypes[arr_type][bpp]
                 data = np.frombuffer(zf.read(item.filename),dtype=(py_dtype, SizeZ))
                 mat_data['OffsetErrors'] = data
-
+    mat_data['Spectral'] = Spectral.astype(S1dtype)
+    mat_data['Spectral_apo'] = Spectral_apo.astype(S1dtype)
     from scipy.io.matlab import savemat
+    print('Writing data ...')
     savemat(re.split('\.[oO][cC][tT]',oct_filename)[0]+'.mat', mat_data)
-
+    print('Done.')
     return mat_data
 
 
-mat_data = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
+# mat_data = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
+mat_data = OCTtoMATraw('/Users/kai/National University of Ireland, Galway/ARANGATH, ANAND - ns_MSC_PELLETS/Anand_NS_MSC_0002_Mode3D.oct') # see OCT_reader_demo.py to retrieve test.oct
