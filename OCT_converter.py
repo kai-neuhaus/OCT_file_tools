@@ -1,17 +1,15 @@
 """
-Testing and usage:
+Convert an Thorlabs OCT file into a mat-file.
 
-run this function at the end of this file ...
-
-mat_data = OCTtoMATraw('test.oct')
-
-Calling this function here directly is for testing.
-The last command can be removed and then this OCT_converter can be imported:
+Testing and usage example:
 
 import OCT_converter
+OCT_converter.OCTtoMATraw('<fname>.oct') # saves '<fname>.mat'
 
-mat_data OCT_converter.OCTtoMATraw('test.oct')
+The function returns also the mat-file data as a dictionary
+mat_data = OCT_converter.OCTtoMATraw('test.oct')
 
+See end at this file to modify the output filename pattern.
 """
 import numpy as np
 from scipy.fftpack import fft,ifft
@@ -117,8 +115,9 @@ def OCTtoMATraw(oct_filename):
 
             elif 'Spectral0' in item.filename and mat_data['Header']['DataFileDict']['Spectral0'].get('ApoRegionStart0'):
                 # If Spectral0 and ApoRegionStart0 exists read it as a complete Apodization spectrum
-                data = np.frombuffer(zf.read(item.filename), dtype=(S0dtype, S0SizeX))[0]
-                Spectral_apo[0] = data
+                # Add dimension for Y assuming a 3D matrix with 1 frame.
+                data = np.frombuffer(zf.read(item.filename), dtype=(S0dtype, [1,S0SizeX, S0SizeZ]))[0]
+                Spectral_apo = data
 
             elif 'Spectral1' in item.filename and mat_data['Header']['DataFileDict']['Spectral1'].get('ApoRegionStart0'):
                 # If Spectral1 exists and has ApoRegionStart0 split raw and apo data.
@@ -164,6 +163,3 @@ def OCTtoMATraw(oct_filename):
     print('Done.')
     return mat_data
 
-
-# mat_data = OCTtoMATraw('test.oct') # see OCT_reader_demo.py to retrieve test.oct
-mat_data = OCTtoMATraw('/Users/kai/National University of Ireland, Galway/ARANGATH, ANAND - ns_MSC_PELLETS/Anand_NS_MSC_0002_Mode3D.oct') # see OCT_reader_demo.py to retrieve test.oct
