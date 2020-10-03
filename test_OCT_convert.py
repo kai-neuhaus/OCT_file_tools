@@ -19,14 +19,17 @@ def test_OCT_converter():
     # This demonstration does not apply intensity scaling.
     #
 
-    data_dict = loadmat('test.mat')
+    # data_dict = loadmat('/Users/kai/National University of Ireland, Galway/Group_TOMI Lab - Documents/srOCT/03-Development/Small_gap_wedge.mat')
+    data_dict = loadmat('/Users/kai/National University of Ireland, Galway/ARANGATH, ANAND - ns_MSC_PELLETS/Anand_MSC_CCM_HALF/Anand_MSC_CCM_half_0004_Mode3D.mat')
+    # data_dict = loadmat('test.mat')
     data = data_dict['Spectral']
     Chirp = data_dict['Chirp'][0]
     Header = json.loads(data_dict['py_Header'][0]) # Restoring dict from MAT file usin json
     spec = data[0,:,:] # take only 1st B-frame
 
-    # Get the raw spectrum from the A-line (1000) of the first B-frame
-    pdata = spec[1000,:]
+    # Get the raw spectrum from the A-line of the first B-frame
+    SizeX = int(Header['Ocity']['Image']['SizePixel']['SizeX'])
+    pdata = spec[SizeX//2,:]
     pp.figure(num = 'Raw spectrum')
     pp.plot(pdata)
 
@@ -39,7 +42,7 @@ def test_OCT_converter():
     # remove DC
     spec = spec - mdata
     pp.figure(num = 'DC removed spectrum')
-    pp.plot(spec[1000,:])
+    pp.plot(spec[SizeX//2,:])
 
     # linearize k - space
     k_lin = interp1d(x=Chirp, y=spec.T, axis=0)
