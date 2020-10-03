@@ -74,32 +74,56 @@ def OCTtoMATraw(oct_filename):
             mat_data['Header']['DataFileDict'][inoct_filename] = dict(shorten_dict_keys(file_object))
         mat_data['py_Header'] = json.dumps(mat_data['Header']) # For Python we need to use json
 
+
+        # test if SizeY exist
+        if mat_data['Header']['Ocity']['Image']['SizePixel'].get('SizeY'):
+            # Add one to include last number for array/matrix allocation indexing.
+            SizeY = int(mat_data['Header']['Ocity']['Image']['SizePixel']['SizeY']) + 1
+        else:
+            SizeY = 1
+
+        Spectral0_only = True
+        scan_range_len = None
+        S0ar_len = None
+        S1ar_len = None
+
         S0arr_type = (mat_data['Header']['DataFileDict']['Spectral0']['Type'])
         S0SizeZ = int(mat_data['Header']['DataFileDict']['Spectral0']['SizeZ'])
         S0SizeX = int(mat_data['Header']['DataFileDict']['Spectral0']['SizeX'])
         S0bpp = int(mat_data['Header']['DataFileDict']['Spectral0']['BytesPerPixel'])
         S0ar_start = int(mat_data['Header']['DataFileDict']['Spectral0']['ApoRegionStart0'])
         S0ar_end = int(mat_data['Header']['DataFileDict']['Spectral0']['ApoRegionEnd0'])
-        S0dtype = python_dtypes[S0arr_type][is_signed][S0bpp]
-
-        # Add one to include last number for array/matrix allocation indexing.
-        SizeY = int(mat_data['Header']['Ocity']['Image']['SizePixel']['SizeY']) + 1
-        Spectral = np.zeros([SizeY, S0SizeX, S0SizeZ])
         S0ar_len = S0ar_end - S0ar_start
-        Spectral_apo = np.zeros([SizeY, S0ar_len])
+        if mat_data['Header']['DataFileDict']['Spectral0'].get('ScanRegionStart0'):
+            S0sr_start  = int(mat_data['Header']['DataFileDict']['Spectral0']['ScanRegionStart0'])
+            S0sr_end    = int(mat_data['Header']['DataFileDict']['Spectral0']['ScanRegionEnd0'])
+            scan_range_len = S0sr_end - S0sr_start
+            # If scan region exist prepare Spectral
+            Spectral = np.zeros([SizeY, scan_range_len, S0SizeZ])
 
-        # TODO: We can possibly use the Header.Ocity.Image parameter avoiding ifelses
+        S0dtype = python_dtypes[S0arr_type][is_signed][S0bpp]
+        Spectral_apo = np.zeros([SizeY, S0ar_len, S0SizeZ])
 
         # Test if a Spectral1.data exist and extract parameters and use for all other raw Spectral data.
         # We use Spectral1.data as it can be that Spectral0.data is a complete different type of ApodizationSpectrum.
         if mat_data['Header']['DataFileDict'].get('Spectral1'):
+            Spectral0_only = False
             S1arr_type  = mat_data['Header']['DataFileDict']['Spectral1']['Type']
             S1SizeZ     = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeZ'])
             S1SizeX     = int(mat_data['Header']['DataFileDict']['Spectral1']['SizeX'])
             S1bpp       = int(mat_data['Header']['DataFileDict']['Spectral1']['BytesPerPixel'])
+            if mat_data['Header']['DataFileDict']['Spectral1'].get('ApoRegionStart0'):
+                S1ar_start = int(mat_data['Header']['DataFileDict']['Spectral1']['ApoRegionStart0'])
+                S1ar_end = int(mat_data['Header']['DataFileDict']['Spectral1']['ApoRegionEnd0'])
+                S1ar_len = S1ar_end - S1ar_start
+                Spectral_apo = np.zeros([SizeY, S1ar_len, S1SizeZ])
             S1sr_start  = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionStart0'])
             S1sr_end    = int(mat_data['Header']['DataFileDict']['Spectral1']['ScanRegionEnd0'])
+            scan_range_len = S1sr_end - S1sr_start
             S1dtype     = python_dtypes[S1arr_type][is_signed][S1bpp]
+
+            # If Spectral1 exist prepare data array with that because Spectral0 may be only Apo data
+            Spectral = np.zeros([SizeY, scan_range_len, S1SizeZ])
 
         # Loop over all remaining items
         for item in zf.filelist:
@@ -155,11 +179,16 @@ def OCTtoMATraw(oct_filename):
                 py_dtype = python_dtypes[arr_type][bpp]
                 data = np.frombuffer(zf.read(item.filename),dtype=(py_dtype, SizeZ))
                 mat_data['OffsetErrors'] = data
-    mat_data['Spectral'] = Spectral.astype(S1dtype)
-    mat_data['Spectral_apo'] = Spectral_apo.astype(S1dtype)
+    if Spectral0_only:
+        mat_data['Spectral'] = Spectral.astype(S0dtype)
+        mat_data['Spectral_apo'] = Spectral_apo.astype(S0dtype)
+    else:
+        mat_data['Spectral'] = Spectral.astype(S1dtype)
+        mat_data['Spectral_apo'] = Spectral_apo.astype(S1dtype)
     from scipy.io.matlab import savemat
     print('Writing data ...')
-    savemat(re.split('\.[oO][cC][tT]',oct_filename)[0]+'.mat', mat_data)
+    # savemat(re.split('\.[oO][cC][tT]',oct_filename)[0]+'.mat', mat_data)
+    np.save(re.split('\.[oO][cC][tT]',oct_filename)[0], mat_data)
     print('Done.')
     return mat_data
 
