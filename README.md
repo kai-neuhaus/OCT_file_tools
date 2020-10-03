@@ -1,4 +1,39 @@
+# OCT_converter
+Requires the package `xmltodict`.
+## Usage
+```
+import OCT_converter
+
+OCT_converter.OCTtoMATraw( '<filename>.oct' )
+```
+
+This should generate a file `<filename>.mat`.
+
+## Read and process the OCT.mat file
+An example to read and process a `<filename>.mat` is given in `test_OCT_convert.m` and `test_OCT_convert.py`.
+
+You can retrieve a test OCT-file using the Python module `gdown`
+```
+import gdown
+
+gdown.download(url='https://drive.google.com/uc?id=18xtWgvMdHw3OslDyyXZ6yMKDywhj_zdR',output='./test.oct')
+
+```
+and convert it with the `OCT_converter` to `test.mat` to be able to run the examples.
+
 # OCT_reader for Thorlabs OCT files
+*Some details related to differences using a mat-file between MATLAB and Python.*
+
+*The example to generate and import a mat-file for Python is provided if the data file is required for Python and MATLAB.\
+Saving the data in a native Python data format is easily possible by changing the line*
+```
+savemat(re.split('\.[oO][cC][tT]',oct_filename)[0]+'.mat', mat_data)
+```
+to something like
+```
+save(re.split('\.[oO][cC][tT]',oct_filename)[0], mat_data)
+```
+
 Needs the modules `xmltodict` and `gdown`, so please install those before with pip.
 
 **The examples are not endorsed by Thorlabs. Please use the provide examples at your own risk.**
